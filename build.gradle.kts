@@ -31,6 +31,10 @@ compose.desktop {
             packageName = "arztliste"
             packageVersion = "1.0.0"
             modules("jdk.unsupported")
+            windows {
+                shortcut = true
+                menu = true
+            }
         }
     }
 }
