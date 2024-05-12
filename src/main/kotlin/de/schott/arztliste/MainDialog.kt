@@ -29,31 +29,13 @@ fun main() = application {
     }
 }
 
-@Preview
-@Composable
-fun preview() {
-    App(
-        CsvConverterViewModel(
-            inputFile = mutableStateOf(Path("123")),
-            outputDirectory = mutableStateOf(Path("123")),
-            consultationTypes = mutableStateOf(setOf(ConsultationType.PHONE)),
-            phoneNumbersToExclude = mutableStateOf(setOf("123456789"))
-        )
-    )
-}
-
 @Composable
 fun App(viewModel: CsvConverterViewModel = CsvConverterViewModel()) {
     var isFileChooserOpen by remember { mutableStateOf(viewModel.fileToChoose != FileToChoose.NONE) }
     var chosenFile by remember { viewModel.inputFile }
     var namesToExclude by remember { viewModel.namesToExclude }
     var phoneNumbersToExclude by remember { viewModel.phoneNumbersToExclude }
-    var selectedConsultationTypes by remember { viewModel.consultationTypes }
-    var dateRestriction by remember { viewModel.dateRestriction }
-    var isDirectoryChooserOpen by remember { mutableStateOf(false) }
-    var chosenDirectory by remember { viewModel.outputDirectory }
     var completionStatus by remember { mutableStateOf<String?>(null) }
-    var isDropdownExpanded by remember { mutableStateOf(false) }
 
     MaterialTheme {
         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
@@ -83,59 +65,11 @@ fun App(viewModel: CsvConverterViewModel = CsvConverterViewModel()) {
                         Text(text = "Ausgewählte Datei: ")
                         Text(text = chosenFile?.toAbsoluteStringOrError().orEmpty())
                     }
-                    Text(text = "Sprechstunden-Arten:", modifier = Modifier.padding(top = 16.dp))
-                    ConsultationType.entries.forEach { type ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = type in selectedConsultationTypes, onCheckedChange = {
-                                when (it) {
-                                    true -> selectedConsultationTypes += type
-                                    false -> selectedConsultationTypes -= type
-                                }
-                            })
-                            Text(text = type.toString())
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Button(onClick = { isDropdownExpanded = true }) {
-                            Text("Zeitraum beschränken")
-                            DropdownMenu(
-                                expanded = isDropdownExpanded,
-                                onDismissRequest = { isDropdownExpanded = false }) {
-                                TextButton(onClick = {
-                                    isDropdownExpanded = false
-                                    dateRestriction = null
-                                }) { Text("Keine Beschränkung") }
-                                TextButton(onClick = {
-                                    isDropdownExpanded = false
-                                    dateRestriction = Period.ofDays(1)
-                                }) { Text("1 Tag") }
-                                for (i in 2..7) {
-                                    TextButton(onClick = {
-                                        isDropdownExpanded = false
-                                        dateRestriction = Period.ofDays(i)
-                                    }) { Text("$i Tage") }
-                                }
-                            }
-                        }
-                        Text(text = when (val days = dateRestriction?.days) {
-                            null -> "Keine Beschränkung"
-                            1 -> "1 Tag"
-                            else -> "$days Tage"
-                        }, modifier = Modifier.padding(start = 16.dp))
-                    }
+                    ConsultationTypePicker(viewModel)
+                    DateRestrictionDropdown(viewModel)
                 }
             }
-            Button(onClick = {
-                isDirectoryChooserOpen = true
-            }) {
-                Text("Ausgabeordner auswählen")
-            }
-            AnimatedVisibility(visible = chosenDirectory != null) {
-                Row {
-                    Text(text = "Ausgewählter Ausgabeordner: ")
-                    Text(text = chosenDirectory?.isValidOutputDirectory.orEmpty())
-                }
-            }
+            DirectoryChooser(viewModel)
             AnimatedVisibility(visible = chosenFile?.canBeAccessed ?: false) {
                 Button(onClick = {
                     try {
@@ -202,6 +136,99 @@ fun App(viewModel: CsvConverterViewModel = CsvConverterViewModel()) {
             isFileChooserOpen = false
             viewModel.fileToChoose = FileToChoose.NONE
         }
+    }
+}
+
+@Composable
+fun ConsultationTypePicker(viewModel: CsvConverterViewModel) {
+    var selectedConsultationTypes by remember { viewModel.consultationTypes }
+
+    Text(text = "Sprechstunden-Arten:", modifier = Modifier.padding(top = 16.dp))
+    ConsultationType.entries.forEach { type ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = type in selectedConsultationTypes, onCheckedChange = {
+                when (it) {
+                    true -> selectedConsultationTypes += type
+                    false -> selectedConsultationTypes -= type
+                }
+            })
+            Text(text = type.toString())
+        }
+    }
+}
+
+@Composable
+fun DateRestrictionDropdown(viewModel: CsvConverterViewModel) {
+    var dateRestriction by remember { viewModel.dateRestriction }
+    var isDropdownExpanded by remember { mutableStateOf(false) }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Button(onClick = { isDropdownExpanded = true }) {
+            Text("Zeitraum beschränken")
+            DropdownMenu(
+                expanded = isDropdownExpanded,
+                onDismissRequest = { isDropdownExpanded = false }
+            ) {
+                DateRestrictionDropdownItem(
+                    numberOfDays = null,
+                    changeDropdownState = { isDropdownExpanded = it },
+                    onSelection = { dateRestriction = it })
+                repeat(8) { days ->
+                    DateRestrictionDropdownItem(
+                        numberOfDays = days,
+                        changeDropdownState = { isDropdownExpanded = it },
+                        onSelection = { dateRestriction = it })
+                }
+            }
+        }
+        Text(
+            text = when (val days = dateRestriction?.days) {
+                null -> "Keine Beschränkung"
+                0 -> "Heute"
+                1 -> "1 Tag"
+                else -> "$days Tage"
+            }, modifier = Modifier.padding(start = 16.dp)
+        )
+    }
+}
+
+@Composable
+fun DateRestrictionDropdownItem(
+    numberOfDays: Int?,
+    changeDropdownState: (Boolean) -> Unit,
+    onSelection: (Period?) -> Unit
+) = TextButton(onClick = {
+    changeDropdownState(false)
+    onSelection(numberOfDays?.let { Period.ofDays(it) })
+}) {
+    Text(
+        text = when (numberOfDays) {
+            null -> "Keine Beschränkung"
+            0 -> "Heute"
+            1 -> "1 Tag"
+            else -> "$numberOfDays Tage"
+        }
+    )
+}
+
+@Composable
+fun DirectoryChooser(viewModel: CsvConverterViewModel) {
+    var isDirectoryChooserOpen by remember { mutableStateOf(false) }
+    var chosenDirectory by remember { viewModel.outputDirectory }
+
+    Column {
+        Button(onClick = {
+            isDirectoryChooserOpen = true
+        }) {
+            Text("Ausgabeordner auswählen")
+        }
+        AnimatedVisibility(visible = chosenDirectory != null) {
+            Row {
+                Text(text = "Ausgewählter Ausgabeordner: ")
+                Text(text = chosenDirectory?.isValidOutputDirectory.orEmpty())
+            }
+        }
+
         DirectoryPicker(show = isDirectoryChooserOpen) {
             val selection = it?.let { Path(it) }
             chosenDirectory = if (selection != null && selection.exists() && selection.isDirectory()) {
