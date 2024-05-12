@@ -107,6 +107,10 @@ fun App(viewModel: CsvConverterViewModel = CsvConverterViewModel()) {
                                 }) { Text("Keine Beschränkung") }
                                 TextButton(onClick = {
                                     isDropdownExpanded = false
+                                    dateRestriction = Period.ofDays(0)
+                                }) { Text("Heute") }
+                                TextButton(onClick = {
+                                    isDropdownExpanded = false
                                     dateRestriction = Period.ofDays(1)
                                 }) { Text("1 Tag") }
                                 for (i in 2..7) {
@@ -119,6 +123,7 @@ fun App(viewModel: CsvConverterViewModel = CsvConverterViewModel()) {
                         }
                         Text(text = when (val days = dateRestriction?.days) {
                             null -> "Keine Beschränkung"
+                            0 -> "Heute"
                             1 -> "1 Tag"
                             else -> "$days Tage"
                         }, modifier = Modifier.padding(start = 16.dp))
