@@ -1,35 +1,37 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
-    kotlin("jvm") version "1.9.23"
-    alias(compiler.plugins.kotlinx.serialization)
-    id("org.jetbrains.compose") version "1.6.2"
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlinx.serialization.compiler)
+    alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.compose.multiplatform)
 }
 
 group = "de.schott"
-version = "1.0.0"
+version = project.properties["version"] as String
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(25)
 }
 
-
 dependencies {
-    implementation(compiler.json.serialization) {
+    implementation(libs.kotlinx.serialization.json) {
         because("the input is a JSON file.")
     }
     implementation(compose.desktop.currentOs)
-    implementation(views.file.picker)
+    implementation(libs.file.picker)
 }
 
 compose.desktop {
     application {
         mainClass = "de.schott.arztliste.MainDialogKt"
 
+        jvmArgs += "--enable-native-access=ALL-UNNAMED"
+
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            targetFormats(TargetFormat.Rpm, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "arztliste"
-            packageVersion = "1.0.0"
+            packageVersion = project.properties["version"] as String
             modules("jdk.unsupported")
             windows {
                 shortcut = true

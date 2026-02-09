@@ -66,13 +66,15 @@ fun convert(json: Path, outputPath: Path, doctorsToExclude: Set<String>, phoneNu
     val filteredDoctors = doctors.filter { doctor ->
         doctor.name !in doctorsToExclude && doctor.contactData.phone !in phoneNumbersToExclude
                 && doctor.contactData.mobile !in phoneNumbersToExclude
-                && doctor.consultationHours.any { (date, _) -> date >= LocalDate.now() && date <= LocalDate.now() + period }
+                && doctor.hasConsultationHoursWithin(period)
     }.map { doctor ->
-        doctor.copy(consultationHours = doctor.consultationHours.filter { (date, _) -> date >= LocalDate.now() && date <= LocalDate.now() + period })
+        doctor.withConsultationHoursWithin(period)
     }.filter { doctor ->
         doctor.consultationHours.any { (_, hours) -> hours.any { it.type in consultationTypeFilter } }
     }.map {  doctor ->
-        doctor.copy(consultationHours = doctor.consultationHours.map { hours ->
+        doctor.copy(consultationHours = doctor.consultationHours.filter { (_, consultations) ->
+            consultations.any { it.type in consultationTypeFilter } // remove days without consultations of the desired types
+        }.map { hours ->
             hours.copy(second = hours.second.filter { it.type in consultationTypeFilter })
         })
     }
@@ -155,7 +157,17 @@ data class Doctor(
     val contactData: ContactData = ContactData(),
     val address: Address = Address(),
     val consultationHours: List<Pair<LocalDate, List<ConsultationHours>>> = emptyList()
-)
+) {
+    fun hasConsultationHoursWithin(period: Period?): Boolean = when (period) {
+        null -> consultationHours.any { (date, _) -> date >= LocalDate.now() }
+        else -> consultationHours.any { (date, _) -> date >= LocalDate.now() && date <= LocalDate.now() + period  }
+    }
+
+    fun withConsultationHoursWithin(period: Period?): Doctor = copy(consultationHours = when (period) {
+        null -> consultationHours.filter { (date, _) -> date >= LocalDate.now() }
+        else -> consultationHours.filter { (date, _) -> date >= LocalDate.now() && date <= LocalDate.now() + period }
+    })
+}
 
 @JvmRecord
 data class ContactData(
