@@ -39,7 +39,15 @@ fun convert(json: Path, outputPath: Path, doctorsToExclude: Set<String>, phoneNu
     }
     val doctors = doctorDtos.arztPraxisDatas.map { doctorDto ->
         Doctor(
-            name = doctorDto.name.orEmpty(),
+            name = buildString {
+                if (!doctorDto.vorname.isNullOrBlank()) {
+                    append(doctorDto.vorname.trim())
+                    append(' ')
+                }
+                if (!doctorDto.name.isNullOrBlank()) {
+                    append(doctorDto.name.trim())
+                }
+            },
             contactData = ContactData(
                 phone = doctorDto.tel,
                 email = doctorDto.email,
@@ -51,12 +59,12 @@ fun convert(json: Path, outputPath: Path, doctorsToExclude: Set<String>, phoneNu
                 zipCode = doctorDto.plz,
                 city = doctorDto.ort
             ),
-            consultationHours = doctorDto.tsz.filter { it.tszDesTyps.isNotEmpty() }.map { (day, _, consultationHoursDtos) ->
+            consultationHours = doctorDto.tsz.filter { it.typTsz.isNotEmpty() }.map { (day, consultationHoursDtos) ->
                 day.toLocalDate() to consultationHoursDtos.map { (type, timeframes) ->
                     ConsultationHours(
                         type = ConsultationType.parse(from = type),
                         times = timeframes.map { (timeFrame) ->
-                            timeFrame.split('-').let { it[0].toLocalTime() to it[1].toLocalTime() }
+                            timeFrame.split('-').let { it[0].trim().toLocalTime() to it[1].trim().toLocalTime() }
                         }
                     )
                 }
@@ -66,13 +74,15 @@ fun convert(json: Path, outputPath: Path, doctorsToExclude: Set<String>, phoneNu
     val filteredDoctors = doctors.filter { doctor ->
         doctor.name !in doctorsToExclude && doctor.contactData.phone !in phoneNumbersToExclude
                 && doctor.contactData.mobile !in phoneNumbersToExclude
-                && doctor.consultationHours.any { (date, _) -> date >= LocalDate.now() && date <= LocalDate.now() + period }
+                && doctor.hasConsultationHoursWithin(period)
     }.map { doctor ->
-        doctor.copy(consultationHours = doctor.consultationHours.filter { (date, _) -> date >= LocalDate.now() && date <= LocalDate.now() + period })
+        doctor.withConsultationHoursWithin(period)
     }.filter { doctor ->
         doctor.consultationHours.any { (_, hours) -> hours.any { it.type in consultationTypeFilter } }
     }.map {  doctor ->
-        doctor.copy(consultationHours = doctor.consultationHours.map { hours ->
+        doctor.copy(consultationHours = doctor.consultationHours.filter { (_, consultations) ->
+            consultations.any { it.type in consultationTypeFilter } // remove days without consultations of the desired types
+        }.map { hours ->
             hours.copy(second = hours.second.filter { it.type in consultationTypeFilter })
         })
     }
@@ -145,9 +155,9 @@ fun List<ConsultationHours>.toCsvCell(filter: Set<ConsultationType>): String = j
     }
 }
 
-fun String.toLocalDate(): LocalDate = split('.').let { LocalDate.of(LocalDate.now().year, it[1].toInt(), it[0].toInt()) }
+fun String.toLocalDate(): LocalDate = LocalDate.parse(this)
 
-fun String.toLocalTime(): LocalTime = split(":").let { LocalTime.of(it[0].toInt(), it[1].toInt()) }
+fun String.toLocalTime(): LocalTime = LocalTime.parse(this)
 
 @JvmRecord
 data class Doctor(
@@ -155,7 +165,17 @@ data class Doctor(
     val contactData: ContactData = ContactData(),
     val address: Address = Address(),
     val consultationHours: List<Pair<LocalDate, List<ConsultationHours>>> = emptyList()
-)
+) {
+    fun hasConsultationHoursWithin(period: Period?): Boolean = when (period) {
+        null -> consultationHours.any { (date, _) -> date >= LocalDate.now() }
+        else -> consultationHours.any { (date, _) -> date >= LocalDate.now() && date <= LocalDate.now() + period  }
+    }
+
+    fun withConsultationHoursWithin(period: Period?): Doctor = copy(consultationHours = when (period) {
+        null -> consultationHours.filter { (date, _) -> date >= LocalDate.now() }
+        else -> consultationHours.filter { (date, _) -> date >= LocalDate.now() && date <= LocalDate.now() + period }
+    })
+}
 
 @JvmRecord
 data class ContactData(
@@ -189,23 +209,17 @@ data class ConsultationHours(
     }
 }
 
-enum class ConsultationType(private val text: String) {
-    PHONE("Telefonische Erreichbarkeit"),
-    REGULAR("Sprechstunde"),
-    APPOINTMENT("Sprechstunde mit Termin"),
-    WITHOUT_APPOINTMENT("Sprechstunde ohne Termin"),
-    OPEN("Offene Sprechstunde");
+enum class ConsultationType(private val text: String, private val apiName: String) {
+    PHONE(text = "Telefonische Erreichbarkeit", apiName = "07"),
+    REGULAR(text = "Sprechstunde", apiName = "01"),
+    APPOINTMENT(text = "Sprechstunde mit Termin", apiName = "03"),
+    WITHOUT_APPOINTMENT(text = "Sprechstunde ohne Termin", apiName = "02");
 
     override fun toString(): String = text
 
     companion object {
-        fun parse(from: String): ConsultationType = when (from) {
-            PHONE.text -> PHONE
-            REGULAR.text -> REGULAR
-            APPOINTMENT.text -> APPOINTMENT
-            WITHOUT_APPOINTMENT.text -> WITHOUT_APPOINTMENT
-            OPEN.text -> OPEN
-            else -> throw IllegalArgumentException("Unknown ConsultationType: $from")
+        fun parse(from: String): ConsultationType = requireNotNull(entries.find { it.apiName == from }) {
+            "Unknown ConsultationType: $from"
         }
     }
 }
@@ -221,6 +235,7 @@ data class DoctorListDto(
 data class DoctorDataDto(
     val keineSprechzeiten: Boolean,
     val name: String? = null,
+    val vorname: String? = null,
     val tel: String? = null,
     val handy: String? = null,
     val email: String? = null,
@@ -235,8 +250,7 @@ data class DoctorDataDto(
 @Serializable
 data class ConsultationDaysDto(
     val d: String,
-    val t: String,
-    val tszDesTyps: List<ConsultationHoursDto> = emptyList()
+    val typTsz: List<ConsultationHoursDto> = emptyList()
 )
 
 @JvmRecord
@@ -249,5 +263,5 @@ data class ConsultationHoursDto(
 @JvmRecord
 @Serializable
 data class TimeFrameDto(
-    val zeit: String
+    val z: String
 )

@@ -1,0 +1,15 @@
+[versions]
+kotlin = "2.3.10"
+serialization = "1.10.0"
+compose = "1.10.0"
+mp-file-picker = "3.1.0"
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlinx-serialization-compiler = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin"}
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose" }
+
+[libraries]
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
+file-picker = { group = "com.darkrockstudios", name = "mpfilepicker", version.ref = "mp-file-picker" }
